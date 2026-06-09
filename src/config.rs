@@ -57,6 +57,16 @@ pub fn mode() -> String {
         .unwrap_or_else(|| "pull".to_string())
 }
 
+/// Max characters of recent-context returned per peer answer (the token-budget
+/// knob, especially for broadcasts). Default 5000.
+pub fn max_chars() -> usize {
+    std::env::var("CLAUDE_MESH_MAX_CHARS")
+        .ok()
+        .and_then(|s| s.parse().ok())
+        .filter(|&n| n > 0)
+        .unwrap_or(5000)
+}
+
 pub fn hostname() -> String {
     if let Ok(h) = std::env::var("CLAUDE_MESH_HOST") {
         if !h.is_empty() {

@@ -116,10 +116,13 @@ fn sync_sessions(tx: &Tx, known: &mut HashMap<String, PeerInfo>) {
                 continue;
             };
             let id = format!("{host}:{}", sf.session_id);
-            let task = if sf.transcript_path.is_empty() {
-                String::new()
-            } else {
-                transcript::derive_task(&sf.transcript_path)
+            // The task label is the (immutable) first user message: compute it
+            // once and freeze it. Only re-read while it's still empty — e.g. the
+            // transcript had no user message yet when the session first registered.
+            let task = match known.get(&id) {
+                Some(prev) if !prev.task.is_empty() => prev.task.clone(),
+                _ if sf.transcript_path.is_empty() => String::new(),
+                _ => transcript::derive_task(&sf.transcript_path),
             };
             current.insert(
                 id.clone(),
@@ -172,7 +175,7 @@ fn answer(session_id: &str, question: &str) -> String {
         out.push('\n');
     }
     out.push_str("Most recent conversation:\n");
-    out.push_str(&transcript::read_context(&tp, 24, 5000));
+    out.push_str(&transcript::read_context(&tp, 24, config::max_chars()));
     out
 }
 

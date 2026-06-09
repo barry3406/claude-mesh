@@ -135,6 +135,7 @@ One binary plays all roles, selected by subcommand.
 | `CLAUDE_MESH_TOKEN` | _(empty)_ | Shared secret; required to join when set. |
 | `CLAUDE_MESH_NAME` | dir basename | Override this window's display name. |
 | `CLAUDE_MESH_HOST` | `hostname` | Override the host label. |
+| `CLAUDE_MESH_MAX_CHARS` | `5000` | Max recent-context chars returned per peer answer (your token-budget knob, esp. for broadcasts). |
 
 ## Uninstall
 
