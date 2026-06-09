@@ -67,6 +67,11 @@ pub fn max_chars() -> usize {
         .unwrap_or(5000)
 }
 
+/// Live-mode control socket path for this window (set by the `cmesh` wrapper).
+pub fn ctl() -> String {
+    std::env::var("CLAUDE_MESH_CTL").unwrap_or_default()
+}
+
 pub fn hostname() -> String {
     if let Ok(h) = std::env::var("CLAUDE_MESH_HOST") {
         if !h.is_empty() {

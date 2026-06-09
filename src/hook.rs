@@ -67,6 +67,7 @@ pub fn session_start() {
         "cwd": cwd,
         "transcript_path": transcript,
         "mode": config::mode(),
+        "ctl": config::ctl(),
     });
     let dir = config::sessions_dir();
     let _ = std::fs::create_dir_all(&dir);

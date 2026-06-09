@@ -28,6 +28,22 @@ pub fn default_mode() -> String {
     "pull".to_string()
 }
 
+/// On-disk record the SessionStart hook drops per live session (in
+/// ~/.claude-mesh/sessions/). Read by the daemon (presence + answering) and by
+/// cmesh (to find its own transcript). `ctl` is the live-mode control socket path.
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct SessionFile {
+    pub session_id: String,
+    pub name: String,
+    pub cwd: String,
+    #[serde(default)]
+    pub transcript_path: String,
+    #[serde(default = "default_mode")]
+    pub mode: String,
+    #[serde(default)]
+    pub ctl: String,
+}
+
 /// One peer's reply to an ask: a slice of its live context.
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct PeerAnswer {

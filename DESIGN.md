@@ -43,7 +43,7 @@ first). Transcript paths never enter the protocol — only presence and resultin
 - **`pull`** (default, shipped): the answering daemon reads that session's transcript and
   returns a recent slice + keyword-relevant lines. Always available. Non-intrusive — the
   peer's live window is untouched.
-- **`live`** (opt-in, milestone 2): the window is launched through a thin PTY wrapper
+- **`live`** (opt-in, experimental): the window is launched through a thin PTY wrapper
   (`cmesh`, which `exec`s the real `claude` and owns its pty) and advertises `mode=live`.
   An incoming ask is injected into the running session; its actual reply is captured from
   the pty/transcript and returned. The peer answers for real and may run read-only tools —
@@ -56,16 +56,23 @@ back to `pull`** on timeout or a missing pty, so `live` is strictly an upgrade l
 — never a separate, incompatible track. Users choose by how they launch each window:
 `claude` → pull, `cmesh` → live.
 
-### Milestone 2 sketch (live)
+### How `live` works (implemented, experimental)
 
-1. `cmesh` subcommand: allocate a pty, `exec` `claude` as the child, pump user↔child IO
-   transparently, and expose a control channel for injection.
-2. Daemon, on an `AskRequest` for a `live` session, sends the framed question to that
-   window's control channel instead of reading the transcript; waits (bounded) for the
-   reply delimiter; returns the captured text.
-3. Inject with a clear, non-executable framing ("a peer asks: …; answer, don't act") and
-   keep answering read-only.
-4. Timeout / no-pty → fall back to the `pull` path.
+1. `cmesh` allocates a pty, spawns the real `claude` inside it, and proxies stdin/stdout
+   transparently (tracking terminal resize). It sets `CLAUDE_MESH_MODE=live` and
+   `CLAUDE_MESH_CTL=<unix socket>` in the child env; the hook records both into the session
+   file, so the daemon learns the window is live and where to reach it.
+2. On an `AskRequest` for a live session, the daemon connects to that socket and forwards the
+   question. `cmesh` injects it into the pty (the text + a carriage return to submit) and then
+   **captures the reply from the transcript** — not by scraping the TUI — waiting for a new
+   assistant message followed by ~1.5s of quiescence.
+3. Guards: if the session looks mid-turn (transcript changed in the last 2s) `cmesh` declines
+   rather than barge in; a 50s cap bounds the wait. Any decline/timeout/error makes the daemon
+   fall back to `pull`, so `live` is strictly an upgrade.
+4. **Caveat (why experimental):** injection takes a real turn in that window — it appears in
+   the conversation and consumes its context — and submit relies on a carriage return being
+   interpreted as Enter by Claude's TUI. Verify in your setup before relying on it; `pull`
+   stays the safe default.
 
 ## Security model
 

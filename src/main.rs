@@ -6,6 +6,7 @@
 
 mod broker;
 mod client;
+mod cmesh;
 mod config;
 mod daemon;
 mod hook;
@@ -50,6 +51,11 @@ enum Cmd {
     Peers,
     /// Ask a peer from the CLI; use the name "all" to broadcast.
     Ask { name: String, question: Vec<String> },
+    /// Launch `claude` wrapped for live cross-window answers (sets mode=live).
+    Cmesh {
+        #[arg(trailing_var_arg = true, allow_hyphen_values = true)]
+        args: Vec<String>,
+    },
 }
 
 #[derive(Subcommand)]
@@ -93,6 +99,12 @@ async fn main() {
         },
         Cmd::Peers => cli_peers().await,
         Cmd::Ask { name, question } => cli_ask(name, question.join(" ")).await,
+        Cmd::Cmesh { args } => {
+            if let Err(e) = cmesh::run(args) {
+                eprintln!("cmesh error: {e}");
+                std::process::exit(1);
+            }
+        }
     }
 }
 

@@ -29,14 +29,22 @@ How a window *answers* an ask is a per-window choice, and both modes share one m
 
 - **`pull`** (default): the peer's daemon reads its transcript and returns a recent slice.
   Free, non-intrusive, always works. This is what ships today.
-- **`live`** (opt-in, on the roadmap): launch a window through the `cmesh` PTY wrapper and it
+- **`live`** (opt-in, **experimental**): launch a window through the `cmesh` PTY wrapper and it
   answers *for real* — the question is injected into the running session, which replies from
   its live context and may run read-only tools. Still on your subscription, still no
-  `claude -p`, still no extra billing. Falls back to `pull` automatically.
+  `claude -p`, still no extra billing. Falls back to `pull` automatically on a timeout, a
+  busy/active turn, or any error.
 
-You pick per window by how you start it: `claude` → pull, `cmesh` → live. They mix freely,
-so different windows in the same mesh can use whichever you prefer. See
-[DESIGN.md](DESIGN.md) for the architecture and the `live` plan.
+  ```sh
+  claude-mesh cmesh             # use instead of `claude`   (alias cmesh='claude-mesh cmesh')
+  claude-mesh cmesh --resume    # any claude args pass straight through
+  ```
+
+You pick per window by how you start it: `claude` → pull, `claude-mesh cmesh` → live. They mix
+freely, so different windows in the same mesh can use whichever you prefer. `live` is
+experimental — it takes a real turn in the target window (visible in its conversation, costs
+its context) and relies on the TUI treating a carriage return as submit; see
+[DESIGN.md](DESIGN.md) for the mechanism and caveats.
 
 ## Install
 

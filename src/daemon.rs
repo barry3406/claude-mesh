@@ -6,24 +6,12 @@ use crate::config;
 use crate::protocol::*;
 use crate::transcript;
 use futures_util::{SinkExt, StreamExt};
-use serde::Deserialize;
 use std::collections::HashMap;
+use std::time::Duration;
 use tokio::sync::mpsc;
 use tokio_tungstenite::tungstenite::Message;
 
 type Tx = mpsc::UnboundedSender<Message>;
-
-/// On-disk record dropped by the SessionStart hook (one file per live session).
-#[derive(Deserialize)]
-struct SessionFile {
-    session_id: String,
-    name: String,
-    cwd: String,
-    #[serde(default)]
-    transcript_path: String,
-    #[serde(default = "crate::protocol::default_mode")]
-    mode: String,
-}
 
 fn cli(m: &ClientMsg) -> Message {
     Message::Text(serde_json::to_string(m).expect("serialize ClientMsg"))
@@ -160,10 +148,25 @@ fn sync_sessions(tx: &Tx, known: &mut HashMap<String, PeerInfo>) {
     *known = current;
 }
 
-/// Build an answer for a forwarded ask: relevant earlier messages + recent context.
+/// Answer a forwarded ask. A live (cmesh-wrapped) session is injected with the
+/// question and we read back its real reply; on any hiccup — busy, no control
+/// socket, timeout — we fall back to the pull path (relevant earlier messages +
+/// recent context). Pull is always available, so live is strictly an upgrade.
 fn answer(session_id: &str, question: &str) -> String {
-    let Some(tp) = find_transcript(session_id) else {
+    let Some(sf) = find_session(session_id) else {
         return "(this session is no longer live on its host)".to_string();
+    };
+    if sf.mode == "live" && !sf.ctl.is_empty() {
+        if let Some(ans) = try_live(&sf.ctl, question) {
+            return ans;
+        }
+    }
+    pull_answer(&sf, question)
+}
+
+fn pull_answer(sf: &SessionFile, question: &str) -> String {
+    let Some(tp) = resolve_transcript(sf) else {
+        return "(transcript not found on this host)".to_string();
     };
     let mut out = String::new();
     let rel = transcript::relevant_lines(&tp, question, 4);
@@ -179,29 +182,44 @@ fn answer(session_id: &str, question: &str) -> String {
     out
 }
 
-/// Locate the transcript for a session by reading its session file (then falling
-/// back to Claude Code's default project path layout).
-fn find_transcript(session_id: &str) -> Option<String> {
-    if let Ok(rd) = std::fs::read_dir(config::sessions_dir()) {
-        for entry in rd.flatten() {
-            let Ok(raw) = std::fs::read_to_string(entry.path()) else {
-                continue;
-            };
-            let Ok(sf) = serde_json::from_str::<SessionFile>(&raw) else {
-                continue;
-            };
-            if sf.session_id == session_id {
-                if !sf.transcript_path.is_empty()
-                    && std::path::Path::new(&sf.transcript_path).exists()
-                {
-                    return Some(sf.transcript_path);
-                }
-                let fallback = config::default_transcript(&sf.cwd, session_id);
-                if std::path::Path::new(&fallback).exists() {
-                    return Some(fallback);
-                }
-            }
+/// Ask a live window over its control socket and wait for the captured reply.
+/// Returns None to signal "fall back to pull".
+fn try_live(ctl: &str, question: &str) -> Option<String> {
+    use std::io::{Read, Write};
+    let mut s = std::os::unix::net::UnixStream::connect(ctl).ok()?;
+    s.set_read_timeout(Some(Duration::from_secs(58))).ok()?;
+    let req = serde_json::json!({ "question": question }).to_string();
+    s.write_all(req.as_bytes()).ok()?;
+    s.write_all(b"\n").ok()?;
+    s.flush().ok()?;
+    let mut resp = String::new();
+    s.read_to_string(&mut resp).ok()?;
+    let v: serde_json::Value = serde_json::from_str(resp.trim()).ok()?;
+    v.get("answer")
+        .and_then(|a| a.as_str())
+        .map(|a| format!("(answered live)\n{a}"))
+}
+
+fn find_session(session_id: &str) -> Option<SessionFile> {
+    for entry in std::fs::read_dir(config::sessions_dir()).ok()?.flatten() {
+        let Ok(raw) = std::fs::read_to_string(entry.path()) else {
+            continue;
+        };
+        let Ok(sf) = serde_json::from_str::<SessionFile>(&raw) else {
+            continue;
+        };
+        if sf.session_id == session_id {
+            return Some(sf);
         }
     }
     None
+}
+
+/// The session's transcript path, falling back to Claude Code's default layout.
+fn resolve_transcript(sf: &SessionFile) -> Option<String> {
+    if !sf.transcript_path.is_empty() && std::path::Path::new(&sf.transcript_path).exists() {
+        return Some(sf.transcript_path.clone());
+    }
+    let fallback = config::default_transcript(&sf.cwd, &sf.session_id);
+    std::path::Path::new(&fallback).exists().then_some(fallback)
 }

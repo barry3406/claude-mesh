@@ -277,11 +277,17 @@ fn dispatch(
     }
     *collector.r_ids.lock().unwrap() = r_ids;
 
-    // Don't wait forever on a slow or wedged peer.
+    // Don't wait forever on a slow or wedged peer. Live peers may run a real turn
+    // (and tools), so give the fan-out longer when any target is live.
+    let secs = if targets.iter().any(|p| p.mode == "live") {
+        60
+    } else {
+        12
+    };
     let state2 = state.clone();
     let collector2 = collector.clone();
     tokio::spawn(async move {
-        tokio::time::sleep(std::time::Duration::from_secs(12)).await;
+        tokio::time::sleep(std::time::Duration::from_secs(secs)).await;
         complete(&collector2, &state2);
     });
 }
