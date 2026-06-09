@@ -58,5 +58,7 @@ pub async fn query(kind: QueryKind) -> anyhow::Result<ServerMsg> {
             other => return Ok(other),
         }
     }
-    Err(anyhow::anyhow!("broker closed the connection before answering"))
+    Err(anyhow::anyhow!(
+        "broker closed the connection before answering"
+    ))
 }

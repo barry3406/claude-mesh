@@ -90,8 +90,7 @@ pub fn session_end() {
 /// Make sure a local broker (if applicable) and the daemon are up. Liveness is a
 /// plain TCP connect against each one's port; if it refuses, we spawn it detached.
 fn ensure_running() {
-    if config::broker_is_local()
-        && std::net::TcpStream::connect(config::broker_tcp_addr()).is_err()
+    if config::broker_is_local() && std::net::TcpStream::connect(config::broker_tcp_addr()).is_err()
     {
         util::spawn_detached(&["broker"]);
     }

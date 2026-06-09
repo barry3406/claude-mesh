@@ -19,7 +19,11 @@ use clap::{Parser, Subcommand};
 use protocol::{QueryKind, ServerMsg};
 
 #[derive(Parser)]
-#[command(name = "claude-mesh", version, about = "Ask across your Claude Code windows — local and remote.")]
+#[command(
+    name = "claude-mesh",
+    version,
+    about = "Ask across your Claude Code windows — local and remote."
+)]
 struct Cli {
     #[command(subcommand)]
     cmd: Cmd,
@@ -45,10 +49,7 @@ enum Cmd {
     /// List online peers (same data the `peers` tool returns).
     Peers,
     /// Ask a peer from the CLI; use the name "all" to broadcast.
-    Ask {
-        name: String,
-        question: Vec<String>,
-    },
+    Ask { name: String, question: Vec<String> },
 }
 
 #[derive(Subcommand)]

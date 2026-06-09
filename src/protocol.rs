@@ -55,14 +55,30 @@ pub enum QueryKind {
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(tag = "t", content = "c")]
 pub enum ClientMsg {
-    Hello { role: String, token: String },
-    Register { peer: PeerInfo },
-    Deregister { id: String },
-    Heartbeat { id: String, task: String },
+    Hello {
+        role: String,
+        token: String,
+    },
+    Register {
+        peer: PeerInfo,
+    },
+    Deregister {
+        id: String,
+    },
+    Heartbeat {
+        id: String,
+        task: String,
+    },
     /// A peer's reply to a forwarded AskRequest. `request_id` echoes the broker's id.
-    AskResponse { request_id: u64, context: String },
+    AskResponse {
+        request_id: u64,
+        context: String,
+    },
     /// A querier asks the broker something. `request_id` is the querier's own id.
-    Query { request_id: u64, kind: QueryKind },
+    Query {
+        request_id: u64,
+        kind: QueryKind,
+    },
 }
 
 /// broker -> daemon/querier

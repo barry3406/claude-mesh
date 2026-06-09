@@ -188,7 +188,8 @@ fn find_transcript(session_id: &str) -> Option<String> {
                 continue;
             };
             if sf.session_id == session_id {
-                if !sf.transcript_path.is_empty() && std::path::Path::new(&sf.transcript_path).exists()
+                if !sf.transcript_path.is_empty()
+                    && std::path::Path::new(&sf.transcript_path).exists()
                 {
                     return Some(sf.transcript_path);
                 }

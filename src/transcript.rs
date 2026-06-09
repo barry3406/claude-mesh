@@ -105,7 +105,10 @@ pub fn read_context(transcript_path: &str, max_msgs: usize, max_chars: usize) ->
 
     let mut out = msgs.join("\n\n");
     if out.chars().count() > max_chars {
-        out = format!("…(older context trimmed)…\n\n{}", char_tail(&out, max_chars));
+        out = format!(
+            "…(older context trimmed)…\n\n{}",
+            char_tail(&out, max_chars)
+        );
     }
     if out.is_empty() {
         out = "(no readable conversation yet)".to_string();
@@ -123,7 +126,7 @@ pub fn relevant_lines(transcript_path: &str, question: &str, max: usize) -> Vec<
         .map(|w| w.trim())
         .filter(|w| {
             let n = w.chars().count();
-            let has_cjk = w.chars().any(|c| !c.is_ascii());
+            let has_cjk = !w.is_ascii();
             (has_cjk && n >= 2) || (!has_cjk && n >= 4)
         })
         .map(|w| w.to_lowercase())

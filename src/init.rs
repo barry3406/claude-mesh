@@ -83,7 +83,16 @@ pub fn run() -> anyhow::Result<()> {
 
 fn register_mcp(exe: &str) {
     let status = std::process::Command::new("claude")
-        .args(["mcp", "add", "claude-mesh", "--scope", "user", "--", exe, "mcp"])
+        .args([
+            "mcp",
+            "add",
+            "claude-mesh",
+            "--scope",
+            "user",
+            "--",
+            exe,
+            "mcp",
+        ])
         .status();
     match status {
         Ok(s) if s.success() => println!("✓ registered MCP server 'claude-mesh' (user scope)"),
@@ -113,6 +122,8 @@ pub fn uninstall() -> anyhow::Result<()> {
         .args(["mcp", "remove", "claude-mesh", "--scope", "user"])
         .status();
     println!("✓ unregistered MCP server (if it was present)");
-    println!("Running broker/daemon, if any, will exit on their own once idle, or kill them manually.");
+    println!(
+        "Running broker/daemon, if any, will exit on their own once idle, or kill them manually."
+    );
     Ok(())
 }

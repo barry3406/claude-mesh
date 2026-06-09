@@ -42,7 +42,9 @@ pub async fn run() -> anyhow::Result<()> {
         };
 
         if let Some(r) = response {
-            stdout.write_all(serde_json::to_string(&r)?.as_bytes()).await?;
+            stdout
+                .write_all(serde_json::to_string(&r)?.as_bytes())
+                .await?;
             stdout.write_all(b"\n").await?;
             stdout.flush().await?;
         }
@@ -120,16 +122,32 @@ async fn tools_call(req: &Value, id: Option<Value>) -> Value {
             Err(e) => format!("mesh error: {e}"),
         },
         "ask_peer" => {
-            let target = args.get("name").and_then(|v| v.as_str()).unwrap_or("").to_string();
-            let question = args.get("question").and_then(|v| v.as_str()).unwrap_or("").to_string();
+            let target = args
+                .get("name")
+                .and_then(|v| v.as_str())
+                .unwrap_or("")
+                .to_string();
+            let question = args
+                .get("question")
+                .and_then(|v| v.as_str())
+                .unwrap_or("")
+                .to_string();
             run_ask(QueryKind::Ask { target, question }).await
         }
         "ask_peers" => {
-            let question = args.get("question").and_then(|v| v.as_str()).unwrap_or("").to_string();
+            let question = args
+                .get("question")
+                .and_then(|v| v.as_str())
+                .unwrap_or("")
+                .to_string();
             let exclude_cwd = std::env::current_dir()
                 .ok()
                 .map(|p| p.to_string_lossy().to_string());
-            run_ask(QueryKind::AskAll { question, exclude_cwd }).await
+            run_ask(QueryKind::AskAll {
+                question,
+                exclude_cwd,
+            })
+            .await
         }
         other => format!("unknown tool: {other}"),
     };
@@ -155,7 +173,10 @@ pub fn format_peers(peers: &[PeerInfo]) -> String {
     let mut s = format!("{} session(s) online:\n", peers.len());
     for p in peers {
         let tag = if p.mode == "live" { "  ⟨live⟩" } else { "" };
-        s.push_str(&format!("• {} @ {}{}\n    cwd: {}\n", p.name, p.host, tag, p.cwd));
+        s.push_str(&format!(
+            "• {} @ {}{}\n    cwd: {}\n",
+            p.name, p.host, tag, p.cwd
+        ));
         if !p.task.is_empty() {
             s.push_str(&format!("    task: {}\n", p.task));
         }

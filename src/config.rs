@@ -35,9 +35,7 @@ pub fn broker_is_local() -> bool {
 /// host:port the local broker binds (and that liveness checks dial).
 pub fn broker_tcp_addr() -> String {
     let u = broker_url();
-    let u = u
-        .trim_start_matches("wss://")
-        .trim_start_matches("ws://");
+    let u = u.trim_start_matches("wss://").trim_start_matches("ws://");
     u.split('/').next().unwrap_or(u).to_string()
 }
 

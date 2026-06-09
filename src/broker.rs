@@ -37,9 +37,9 @@ struct Pending {
 #[derive(Default)]
 struct State {
     peers: HashMap<String, (PeerInfo, u64)>, // peer id -> (info, conn id)
-    conns: HashMap<u64, Tx>,                  // conn id -> writer
-    conn_peers: HashMap<u64, Vec<String>>,    // conn id -> peer ids it registered
-    collectors: HashMap<u64, Pending>,        // internal request id -> pending ask
+    conns: HashMap<u64, Tx>,                 // conn id -> writer
+    conn_peers: HashMap<u64, Vec<String>>,   // conn id -> peer ids it registered
+    collectors: HashMap<u64, Pending>,       // internal request id -> pending ask
 }
 
 pub async fn run() -> anyhow::Result<()> {
@@ -146,7 +146,10 @@ fn handle_client_msg(
                 info.task = task;
             }
         }
-        ClientMsg::AskResponse { request_id, context } => {
+        ClientMsg::AskResponse {
+            request_id,
+            context,
+        } => {
             let pending = state.lock().unwrap().collectors.remove(&request_id);
             if let Some(p) = pending {
                 p.collector.answers.lock().unwrap().push(PeerAnswer {
@@ -165,9 +168,7 @@ fn handle_client_msg(
                 }
             }
         }
-        ClientMsg::Query { request_id, kind } => {
-            handle_query(request_id, kind, state, tx, req_ctr)
-        }
+        ClientMsg::Query { request_id, kind } => handle_query(request_id, kind, state, tx, req_ctr),
     }
 }
 
