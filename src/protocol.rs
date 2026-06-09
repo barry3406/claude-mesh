@@ -58,12 +58,17 @@ pub struct PeerAnswer {
 pub enum QueryKind {
     /// Who's online?
     Peers,
-    /// Ask one peer (matched by name/id substring).
-    Ask { target: String, question: String },
+    /// Ask one peer (matched by name/id substring). `from` identifies the asker.
+    Ask {
+        target: String,
+        question: String,
+        from: String,
+    },
     /// Broadcast to everyone (optionally skipping the asker's own cwd).
     AskAll {
         question: String,
         exclude_cwd: Option<String>,
+        from: String,
     },
 }
 

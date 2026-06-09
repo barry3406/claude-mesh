@@ -117,15 +117,18 @@ async fn cli_peers() {
 }
 
 async fn cli_ask(name: String, question: String) {
+    let from = format!("cli@{}", config::hostname());
     let kind = if name.eq_ignore_ascii_case("all") {
         QueryKind::AskAll {
             question,
             exclude_cwd: None,
+            from,
         }
     } else {
         QueryKind::Ask {
             target: name,
             question,
+            from,
         }
     };
     match client::query(kind).await {

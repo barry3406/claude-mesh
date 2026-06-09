@@ -7,6 +7,7 @@
 //! all logging goes to STDERR.
 
 use crate::client;
+use crate::config;
 use crate::protocol::*;
 use serde_json::{json, Value};
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
@@ -132,7 +133,12 @@ async fn tools_call(req: &Value, id: Option<Value>) -> Value {
                 .and_then(|v| v.as_str())
                 .unwrap_or("")
                 .to_string();
-            run_ask(QueryKind::Ask { target, question }).await
+            run_ask(QueryKind::Ask {
+                target,
+                question,
+                from: me(),
+            })
+            .await
         }
         "ask_peers" => {
             let question = args
@@ -146,6 +152,7 @@ async fn tools_call(req: &Value, id: Option<Value>) -> Value {
             run_ask(QueryKind::AskAll {
                 question,
                 exclude_cwd,
+                from: me(),
             })
             .await
         }
@@ -164,6 +171,14 @@ async fn run_ask(kind: QueryKind) -> String {
         Ok(_) => "unexpected broker response".into(),
         Err(e) => format!("mesh error: {e}"),
     }
+}
+
+/// This window's identity, shown to peers when it asks them something.
+fn me() -> String {
+    let cwd = std::env::current_dir()
+        .map(|p| p.to_string_lossy().to_string())
+        .unwrap_or_default();
+    format!("{}@{}", config::derive_name(&cwd), config::hostname())
 }
 
 pub fn format_peers(peers: &[PeerInfo]) -> String {

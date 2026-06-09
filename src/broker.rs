@@ -91,22 +91,49 @@ async fn handle_conn(
         }
     });
 
+    let mut authed = false;
     while let Some(msg) = read.next().await {
         let txt = match msg? {
             Message::Text(t) => t,
             Message::Close(_) => break,
             _ => continue,
         };
-        match serde_json::from_str::<ClientMsg>(&txt) {
-            Ok(cm) => handle_client_msg(cm, conn_id, &state, &tx, &req_ctr),
+        let cm = match serde_json::from_str::<ClientMsg>(&txt) {
+            Ok(cm) => cm,
             Err(e) => {
                 let _ = tx.send(srv(&ServerMsg::Error {
                     msg: format!("bad message: {e}"),
                 }));
+                continue;
             }
+        };
+        // Gate everything behind a successful Hello, so an exposed broker with a
+        // token can't be registered/queried by an unauthenticated connection.
+        match cm {
+            ClientMsg::Hello { token, .. } => {
+                if token == config::token() {
+                    authed = true;
+                    let _ = tx.send(srv(&ServerMsg::Welcome));
+                } else {
+                    let _ = tx.send(srv(&ServerMsg::Error {
+                        msg: "authentication failed (bad CLAUDE_MESH_TOKEN)".into(),
+                    }));
+                    break;
+                }
+            }
+            _ if !authed => {
+                let _ = tx.send(srv(&ServerMsg::Error {
+                    msg: "not authenticated (send Hello first)".into(),
+                }));
+                break;
+            }
+            other => handle_client_msg(other, conn_id, &state, &tx, &req_ctr),
         }
     }
 
+    // Give the writer a moment to flush any final message (e.g. an auth error)
+    // so the client sees the reason before we tear the connection down.
+    tokio::time::sleep(std::time::Duration::from_millis(150)).await;
     writer.abort();
     Ok(())
 }
@@ -193,7 +220,11 @@ fn handle_query(
                 peers,
             }));
         }
-        QueryKind::Ask { target, question } => {
+        QueryKind::Ask {
+            target,
+            question,
+            from,
+        } => {
             let want = target.to_lowercase();
             let targets: Vec<PeerInfo> = state
                 .lock()
@@ -205,11 +236,12 @@ fn handle_query(
                 })
                 .map(|(p, _)| p.clone())
                 .collect();
-            dispatch(q, question, targets, state, tx, req_ctr);
+            dispatch(q, question, from, targets, state, tx, req_ctr);
         }
         QueryKind::AskAll {
             question,
             exclude_cwd,
+            from,
         } => {
             let targets: Vec<PeerInfo> = state
                 .lock()
@@ -219,7 +251,7 @@ fn handle_query(
                 .map(|(p, _)| p.clone())
                 .filter(|p| exclude_cwd.as_deref() != Some(p.cwd.as_str()))
                 .collect();
-            dispatch(q, question, targets, state, tx, req_ctr);
+            dispatch(q, question, from, targets, state, tx, req_ctr);
         }
     }
 }
@@ -227,6 +259,7 @@ fn handle_query(
 fn dispatch(
     q: u64,
     question: String,
+    from: String,
     targets: Vec<PeerInfo>,
     state: &Arc<Mutex<State>>,
     querier_tx: &Tx,
@@ -260,7 +293,7 @@ fn dispatch(
                 if let Some(ptx) = s.conns.get(cid) {
                     let _ = ptx.send(srv(&ServerMsg::AskRequest {
                         request_id: r,
-                        from: "another Claude window".into(),
+                        from: from.clone(),
                         question: question.clone(),
                         session_id: peer.session_id.clone(),
                     }));

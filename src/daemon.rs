@@ -71,13 +71,17 @@ async fn session(_guard: &std::net::TcpListener) -> anyhow::Result<()> {
                     Message::Close(_) => return Err(anyhow::anyhow!("closed")),
                     _ => continue,
                 };
-                if let Ok(ServerMsg::AskRequest { request_id, question, session_id, .. }) =
-                    serde_json::from_str::<ServerMsg>(&txt)
+                if let Ok(ServerMsg::AskRequest {
+                    request_id,
+                    question,
+                    session_id,
+                    from,
+                }) = serde_json::from_str::<ServerMsg>(&txt)
                 {
                     let tx2 = tx.clone();
                     // Answer off the read loop: reading a transcript is blocking IO.
                     tokio::task::spawn_blocking(move || {
-                        let context = answer(&session_id, &question);
+                        let context = answer(&session_id, &question, &from);
                         let _ = tx2.send(cli(&ClientMsg::AskResponse { request_id, context }));
                     });
                 }
@@ -152,16 +156,27 @@ fn sync_sessions(tx: &Tx, known: &mut HashMap<String, PeerInfo>) {
 /// question and we read back its real reply; on any hiccup — busy, no control
 /// socket, timeout — we fall back to the pull path (relevant earlier messages +
 /// recent context). Pull is always available, so live is strictly an upgrade.
-fn answer(session_id: &str, question: &str) -> String {
+fn answer(session_id: &str, question: &str, from: &str) -> String {
     let Some(sf) = find_session(session_id) else {
         return "(this session is no longer live on its host)".to_string();
     };
     if sf.mode == "live" && !sf.ctl.is_empty() {
-        if let Some(ans) = try_live(&sf.ctl, question) {
+        if let Some(ans) = try_live(&sf.ctl, &frame(from, question)) {
             return ans;
         }
     }
     pull_answer(&sf, question)
+}
+
+/// Identity-aware framing for a live injection: the answering Claude must know it
+/// is a peer relaying its user's question (not its own user) and stay read-only.
+fn frame(from: &str, question: &str) -> String {
+    format!(
+        "[via claude-mesh] You're being asked by another Claude Code session (\"{from}\"), \
+         relaying on behalf of its user — not by your own user. It thinks your current work is \
+         related. Please answer briefly and stay read-only (don't edit files or run mutating \
+         commands), then carry on with what you were doing.\n\nIts question:\n{question}"
+    )
 }
 
 fn pull_answer(sf: &SessionFile, question: &str) -> String {
