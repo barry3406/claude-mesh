@@ -83,3 +83,10 @@ back to `pull`** on timeout or a missing pty, so `live` is strictly an upgrade l
 - **Auth.** `CLAUDE_MESH_TOKEN` gates joining; the default broker binds `127.0.0.1` only.
 - **Privacy.** Only presence leaves a machine by default; full context travels only when a
   peer is actually asked, and only from that one session, read on its own host.
+- **Liveness / phantom reaping.** Every live window runs an MCP server that drops a per-cwd
+  liveness beacon (`~/.claude-mesh/alive/<pid>.beacon`); Claude keeps it alive for the whole
+  session and kills it on exit. The daemon reaps session files whose cwd has no live beacon
+  and whose transcript has gone cold, so a window that died without firing `SessionEnd` stops
+  showing as a peer. A live session always has a beacon in its own cwd, so this never reaps a
+  live one. (Caveat: a phantom that shares a cwd with another live window lingers until that
+  window also closes.)

@@ -93,6 +93,7 @@ async fn session(_guard: &std::net::TcpListener) -> anyhow::Result<()> {
 /// Diff the sessions dir against what the broker knows and emit register/heartbeat/deregister.
 fn sync_sessions(tx: &Tx, known: &mut HashMap<String, PeerInfo>) {
     let host = config::hostname();
+    let alive = alive_cwds();
     let mut current: HashMap<String, PeerInfo> = HashMap::new();
 
     if let Ok(rd) = std::fs::read_dir(config::sessions_dir()) {
@@ -107,6 +108,13 @@ fn sync_sessions(tx: &Tx, known: &mut HashMap<String, PeerInfo>) {
             let Ok(sf) = serde_json::from_str::<SessionFile>(&raw) else {
                 continue;
             };
+            // Reap a phantom: a window that died without firing SessionEnd leaves a
+            // stale session file. If nothing live is in its cwd (no MCP beacon) and
+            // its transcript has gone cold, drop it so it stops showing as a peer.
+            if !alive.contains(&sf.cwd) && transcript_idle(&sf) {
+                let _ = std::fs::remove_file(&path);
+                continue;
+            }
             let id = format!("{host}:{}", sf.session_id);
             // The task label is the (immutable) first user message: compute it
             // once and freeze it. Only re-read while it's still empty — e.g. the
@@ -237,4 +245,99 @@ fn resolve_transcript(sf: &SessionFile) -> Option<String> {
     }
     let fallback = config::default_transcript(&sf.cwd, &sf.session_id);
     std::path::Path::new(&fallback).exists().then_some(fallback)
+}
+
+/// cwds that currently host a live MCP server (its per-session beacon). A live
+/// session always has one in its own cwd, so this never reaps a live session.
+fn alive_cwds() -> std::collections::HashSet<String> {
+    let mut set = std::collections::HashSet::new();
+    let Ok(rd) = std::fs::read_dir(config::alive_dir()) else {
+        return set;
+    };
+    for entry in rd.flatten() {
+        let path = entry.path();
+        let pid: Option<i32> = path
+            .file_stem()
+            .and_then(|s| s.to_str())
+            .and_then(|s| s.parse().ok());
+        match pid {
+            Some(pid) if pid_alive(pid) => {
+                if let Ok(cwd) = std::fs::read_to_string(&path) {
+                    set.insert(cwd.trim().to_string());
+                }
+            }
+            _ => {
+                let _ = std::fs::remove_file(&path); // reap a dead/garbage beacon
+            }
+        }
+    }
+    set
+}
+
+#[cfg(unix)]
+fn pid_alive(pid: i32) -> bool {
+    if pid <= 0 {
+        return false;
+    }
+    if unsafe { libc::kill(pid, 0) } == 0 {
+        return true;
+    }
+    // EPERM means the process exists but we may not signal it.
+    std::io::Error::last_os_error().raw_os_error() == Some(libc::EPERM)
+}
+
+#[cfg(not(unix))]
+fn pid_alive(_pid: i32) -> bool {
+    true
+}
+
+/// True when a session's transcript is gone or hasn't changed in a while — paired
+/// with a dead cwd to confirm a session file is a phantom (not just idle-but-live,
+/// which the cwd beacon already protects).
+fn transcript_idle(sf: &SessionFile) -> bool {
+    let Some(tp) = resolve_transcript(sf) else {
+        return true;
+    };
+    match std::fs::metadata(&tp).and_then(|m| m.modified()) {
+        Ok(mtime) => mtime
+            .elapsed()
+            .map(|e| e > Duration::from_secs(600))
+            .unwrap_or(false),
+        Err(_) => true,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn sf(cwd: &str, transcript: &str) -> SessionFile {
+        SessionFile {
+            session_id: "s".into(),
+            name: "n".into(),
+            cwd: cwd.into(),
+            transcript_path: transcript.into(),
+            mode: "pull".into(),
+            ctl: String::new(),
+        }
+    }
+
+    #[test]
+    fn pid_liveness() {
+        assert!(pid_alive(std::process::id() as i32)); // we're alive
+        assert!(!pid_alive(2_000_000_000)); // not a real pid
+        assert!(!pid_alive(-1));
+    }
+
+    #[test]
+    fn idle_only_when_transcript_cold_or_gone() {
+        let dir = std::env::temp_dir().join("claude-mesh-daemon-tests");
+        std::fs::create_dir_all(&dir).unwrap();
+        let tp = dir.join("fresh.jsonl");
+        std::fs::write(&tp, "{}\n").unwrap();
+        // just-written transcript: a live (even idle) session must NOT look idle
+        assert!(!transcript_idle(&sf("/x", tp.to_str().unwrap())));
+        // no transcript at all: treated as dead
+        assert!(transcript_idle(&sf("/x", "/no/such/transcript.jsonl")));
+    }
 }

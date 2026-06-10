@@ -10,10 +10,12 @@ use crate::client;
 use crate::config;
 use crate::protocol::*;
 use serde_json::{json, Value};
+use std::path::PathBuf;
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
 
 pub async fn run() -> anyhow::Result<()> {
     client::ensure_broker().await;
+    let beacon = write_beacon(); // liveness for the daemon's phantom-peer reaper
 
     let mut lines = BufReader::new(tokio::io::stdin()).lines();
     let mut stdout = tokio::io::stdout();
@@ -50,7 +52,22 @@ pub async fn run() -> anyhow::Result<()> {
             stdout.flush().await?;
         }
     }
+    if let Some(b) = beacon {
+        let _ = std::fs::remove_file(b);
+    }
     Ok(())
+}
+
+/// Drop a liveness beacon (our pid → cwd). Claude keeps this MCP server alive for
+/// the whole session and kills it on exit (stdin EOF), so its presence means the
+/// session is alive; the daemon reaps session files whose cwd has no live beacon.
+fn write_beacon() -> Option<PathBuf> {
+    let dir = config::alive_dir();
+    std::fs::create_dir_all(&dir).ok()?;
+    let cwd = std::env::current_dir().ok()?.to_string_lossy().to_string();
+    let path = dir.join(format!("{}.beacon", std::process::id()));
+    std::fs::write(&path, cwd).ok()?;
+    Some(path)
 }
 
 fn initialize(req: &Value, id: Option<Value>) -> Value {

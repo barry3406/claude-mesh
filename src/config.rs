@@ -17,6 +17,12 @@ pub fn sessions_dir() -> PathBuf {
     base_dir().join("sessions")
 }
 
+/// Liveness beacons — one file per live MCP server (`<pid>.beacon` → its cwd) —
+/// used by the daemon to reap session files whose window has died.
+pub fn alive_dir() -> PathBuf {
+    base_dir().join("alive")
+}
+
 pub fn log_file() -> PathBuf {
     base_dir().join("mesh.log")
 }
