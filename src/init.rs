@@ -70,7 +70,7 @@ pub fn run() -> anyhow::Result<()> {
         std::fs::create_dir_all(parent).ok();
     }
     std::fs::write(&path, serde_json::to_string_pretty(&settings)?)?;
-    println!("✓ wired SessionStart/SessionEnd hooks → {}", path.display());
+    println!("✓ wired lifecycle + attention hooks → {}", path.display());
 
     register_mcp(&exe);
 

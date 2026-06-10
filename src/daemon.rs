@@ -129,11 +129,24 @@ fn sync_sessions(tx: &Tx, known: &mut HashMap<String, PeerInfo>) {
                 .ok()
                 .and_then(|s| serde_json::from_str(&s).ok())
                 .unwrap_or_default();
-            let state = if st.state.is_empty() {
+            let mut state = if st.state.is_empty() {
                 "idle".to_string()
             } else {
                 st.state
             };
+            // A "waiting" whose transcript kept advancing is stale (the window
+            // resumed after you handled it) — show it as working again, so the
+            // board doesn't keep flagging "needs you" once you've responded.
+            if state == "waiting" {
+                let advanced = resolve_transcript(&sf)
+                    .and_then(|tp| std::fs::metadata(tp).and_then(|m| m.modified()).ok())
+                    .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
+                    .map(|d| d.as_secs() > st.since + 2)
+                    .unwrap_or(false);
+                if advanced {
+                    state = "working".to_string();
+                }
+            }
             current.insert(
                 id.clone(),
                 PeerInfo {
