@@ -1,5 +1,9 @@
 # claude-mesh
 
+[![CI](https://github.com/barry3406/claude-mesh/actions/workflows/ci.yml/badge.svg)](https://github.com/barry3406/claude-mesh/actions/workflows/ci.yml)
+[![crates.io](https://img.shields.io/crates/v/claude-mesh.svg)](https://crates.io/crates/claude-mesh)
+[![license: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+
 **Ask across your Claude Code windows — local and remote — without leaving the one you're in.**
 
 You run a lot of Claude Code windows. Window A is doing one thing, window B another, and
@@ -10,6 +14,24 @@ paste it back. `claude-mesh` removes that: from A you just say
 
 and A's Claude pulls the relevant context from the other sessions — including ones running
 over SSH on a remote box — and answers you. You never touch the other windows.
+
+## Demo
+
+<!-- TODO: drop in an asciinema-recorded GIF here -->
+
+```text
+$ claude-mesh peers
+2 session(s) online:
+• niche-monitor @ hostbrr  ⟨live⟩
+    cwd: /root/niche-monitor
+    task: rework the dedup so the same article isn't pushed twice
+• auth-api @ laptop
+    cwd: ~/work/auth-api
+    task: refactor the JWT verification in the auth module
+
+# …or from inside any window, just talk to Claude:
+#   "ask the niche-monitor window how it's handling dedup"
+```
 
 ## Why it costs nothing extra
 

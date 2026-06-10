@@ -4,6 +4,10 @@ version = "0.1.0"
 edition = "2021"
 description = "Ask across your Claude Code windows — local and remote — with zero extra inference cost."
 license = "MIT"
+repository = "https://github.com/barry3406/claude-mesh"
+readme = "README.md"
+keywords = ["claude", "claude-code", "mesh", "cli", "agent"]
+categories = ["command-line-utilities", "development-tools"]
 
 [[bin]]
 name = "claude-mesh"
