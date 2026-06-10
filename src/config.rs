@@ -78,6 +78,27 @@ pub fn ctl() -> String {
     std::env::var("CLAUDE_MESH_CTL").unwrap_or_default()
 }
 
+pub fn now_epoch() -> u64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_secs())
+        .unwrap_or(0)
+}
+
+/// Command run on an attention event (a window needs you). Receives the message
+/// via $MESH_MSG / $MESH_WINDOW / $MESH_STATE. Empty = no push.
+pub fn notify_cmd() -> String {
+    std::env::var("CLAUDE_MESH_NOTIFY_CMD").unwrap_or_default()
+}
+
+/// Also push when a window goes idle (finished a turn), not just when it's blocked.
+pub fn push_idle() -> bool {
+    matches!(
+        std::env::var("CLAUDE_MESH_PUSH_IDLE").as_deref(),
+        Ok("1") | Ok("true") | Ok("yes")
+    )
+}
+
 pub fn hostname() -> String {
     if let Ok(h) = std::env::var("CLAUDE_MESH_HOST") {
         if !h.is_empty() {

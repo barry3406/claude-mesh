@@ -95,8 +95,37 @@ testing without Claude:
 
 ```sh
 claude-mesh peers
+claude-mesh fleet            # attention dashboard: who needs you
+claude-mesh fleet --watch    # live-refreshing
 claude-mesh ask niche-monitor "how are you deduping?"
 claude-mesh ask all "what are you each working on?"
+```
+
+## Fleet — who needs you
+
+Running a dozen windows, the real question isn't "what is everyone doing" — it's **which
+window needs me right now.** `claude-mesh fleet` answers that at a glance:
+
+```text
+FLEET — 6 window(s), 2 need you
+
+● needs you  auth-api @ laptop          1m   refactor the JWT verification
+● needs you  migrate @ hostbrr          4m   run the data backfill
+◐ working    niche-monitor @ hostbrr    30s  rework the dedup logic
+○ idle       crawlab @ laptop           8m   add retry logic
+```
+
+State comes from Claude Code's own hooks — `UserPromptSubmit` → working, `Notification` →
+**needs you**, `Stop` → idle — so it's observed, not guessed. Add `--watch` for a live board.
+
+To get **pushed** the moment any window blocks (even one over SSH), set a notify command; it
+receives `$MESH_WINDOW` / `$MESH_MSG`:
+
+```sh
+# desktop (macOS):
+export CLAUDE_MESH_NOTIFY_CMD='osascript -e "display notification \"$MESH_MSG\""'
+# …or your phone via any webhook (DingTalk / Slack / ntfy):
+export CLAUDE_MESH_NOTIFY_CMD='curl -s "$DING_WEBHOOK" -d "{\"msgtype\":\"text\",\"text\":{\"content\":\"$MESH_MSG\"}}"'
 ```
 
 ## Across machines (SSH / remote)
@@ -166,6 +195,8 @@ One binary plays all roles, selected by subcommand.
 | `CLAUDE_MESH_NAME` | dir basename | Override this window's display name. |
 | `CLAUDE_MESH_HOST` | `hostname` | Override the host label. |
 | `CLAUDE_MESH_MAX_CHARS` | `5000` | Max recent-context chars returned per peer answer (your token-budget knob, esp. for broadcasts). |
+| `CLAUDE_MESH_NOTIFY_CMD` | _(empty)_ | Shell command run when a window needs you; gets `$MESH_WINDOW` / `$MESH_STATE` / `$MESH_MSG`. |
+| `CLAUDE_MESH_PUSH_IDLE` | `0` | Also push when a window finishes a turn (goes idle), not just when it blocks. |
 
 ## Uninstall
 

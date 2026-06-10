@@ -6,7 +6,7 @@ use serde::{Deserialize, Serialize};
 /// Presence record for one live Claude Code session. This is the only thing that
 /// leaves a machine by default — never the transcript itself. Transcript content
 /// is read locally by the owning daemon and only travels as an on-demand answer.
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct PeerInfo {
     /// Globally unique: "<host>:<session_id>".
     pub id: String,
@@ -22,10 +22,30 @@ pub struct PeerInfo {
     /// mesh — `mode` is per-window, chosen at launch, with "pull" as the fallback.
     #[serde(default = "default_mode")]
     pub mode: String,
+    /// Attention state: "working" | "waiting" (needs you) | "idle".
+    #[serde(default = "default_state")]
+    pub state: String,
+    /// Epoch seconds when the current state was entered.
+    #[serde(default)]
+    pub state_since: u64,
 }
 
 pub fn default_mode() -> String {
     "pull".to_string()
+}
+
+pub fn default_state() -> String {
+    "idle".to_string()
+}
+
+/// Per-session attention state, written by the Notification/Stop/UserPromptSubmit
+/// hooks and read by the daemon into presence.
+#[derive(Clone, Debug, Default, Serialize, Deserialize)]
+pub struct StateFile {
+    pub state: String,
+    pub since: u64,
+    #[serde(default)]
+    pub msg: String,
 }
 
 /// On-disk record the SessionStart hook drops per live session (in

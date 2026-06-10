@@ -61,6 +61,9 @@ pub fn run() -> anyhow::Result<()> {
         }
         set_hook(hooks, "SessionStart", &format!("{exe} hook session-start"));
         set_hook(hooks, "SessionEnd", &format!("{exe} hook session-end"));
+        set_hook(hooks, "UserPromptSubmit", &format!("{exe} hook prompt"));
+        set_hook(hooks, "Stop", &format!("{exe} hook stop"));
+        set_hook(hooks, "Notification", &format!("{exe} hook notification"));
     }
 
     if let Some(parent) = path.parent() {
@@ -109,7 +112,13 @@ pub fn uninstall() -> anyhow::Result<()> {
         let mut settings: Value =
             serde_json::from_str(&std::fs::read_to_string(&path)?).unwrap_or_else(|_| json!({}));
         if let Some(hooks) = settings.get_mut("hooks").and_then(|h| h.as_object_mut()) {
-            for event in ["SessionStart", "SessionEnd"] {
+            for event in [
+                "SessionStart",
+                "SessionEnd",
+                "UserPromptSubmit",
+                "Stop",
+                "Notification",
+            ] {
                 if let Some(arr) = hooks.get_mut(event).and_then(|e| e.as_array_mut()) {
                     arr.retain(|grp| !grp.to_string().contains("claude-mesh"));
                 }

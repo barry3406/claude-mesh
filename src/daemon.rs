@@ -113,6 +113,7 @@ fn sync_sessions(tx: &Tx, known: &mut HashMap<String, PeerInfo>) {
             // its transcript has gone cold, drop it so it stops showing as a peer.
             if !alive.contains(&sf.cwd) && transcript_idle(&sf) {
                 let _ = std::fs::remove_file(&path);
+                let _ = std::fs::remove_file(path.with_extension("state"));
                 continue;
             }
             let id = format!("{host}:{}", sf.session_id);
@@ -124,6 +125,15 @@ fn sync_sessions(tx: &Tx, known: &mut HashMap<String, PeerInfo>) {
                 _ if sf.transcript_path.is_empty() => String::new(),
                 _ => transcript::derive_task(&sf.transcript_path),
             };
+            let st: StateFile = std::fs::read_to_string(path.with_extension("state"))
+                .ok()
+                .and_then(|s| serde_json::from_str(&s).ok())
+                .unwrap_or_default();
+            let state = if st.state.is_empty() {
+                "idle".to_string()
+            } else {
+                st.state
+            };
             current.insert(
                 id.clone(),
                 PeerInfo {
@@ -134,23 +144,17 @@ fn sync_sessions(tx: &Tx, known: &mut HashMap<String, PeerInfo>) {
                     task,
                     session_id: sf.session_id,
                     mode: sf.mode,
+                    state,
+                    state_since: st.since,
                 },
             );
         }
     }
 
+    // Re-register on any change (task or attention state); the broker upserts.
     for (id, info) in &current {
-        match known.get(id) {
-            None => {
-                let _ = tx.send(cli(&ClientMsg::Register { peer: info.clone() }));
-            }
-            Some(prev) if prev.task != info.task => {
-                let _ = tx.send(cli(&ClientMsg::Heartbeat {
-                    id: id.clone(),
-                    task: info.task.clone(),
-                }));
-            }
-            _ => {}
+        if known.get(id) != Some(info) {
+            let _ = tx.send(cli(&ClientMsg::Register { peer: info.clone() }));
         }
     }
     for id in known.keys().filter(|k| !current.contains_key(*k)) {

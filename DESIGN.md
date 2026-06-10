@@ -74,6 +74,17 @@ back to `pull`** on timeout or a missing pty, so `live` is strictly an upgrade l
    interpreted as Enter by Claude's TUI. Verify in your setup before relying on it; `pull`
    stays the safe default.
 
+## Attention router
+
+The daemon already knows every window's presence; the attention layer adds *state*. Claude
+Code emits the signals itself — the `UserPromptSubmit` (→ working), `Notification` (→ waiting,
+i.e. needs you), and `Stop` (→ idle) hooks — so each window writes a tiny `<id>.state` file
+that the daemon folds into presence and re-registers on change. `claude-mesh fleet` renders
+the fleet sorted by urgency (needs-you first); `--watch` refreshes it live. On a
+`Notification`, the hook also fires `CLAUDE_MESH_NOTIFY_CMD` — a generic command, so the push
+channel (desktop, DingTalk, Slack, ntfy, …) is the user's choice and works the same for local
+and remote windows. Because state is hook-driven, it's observed, not polled/guessed.
+
 ## Security model
 
 - **Read-only answering.** No mutating tools on the answer path; a peer's question cannot
