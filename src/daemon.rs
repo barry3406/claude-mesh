@@ -147,6 +147,13 @@ fn sync_sessions(tx: &Tx, known: &mut HashMap<String, PeerInfo>) {
                     state = "working".to_string();
                 }
             }
+            let files = if config::enabled("collision") {
+                resolve_transcript(&sf)
+                    .map(|tp| transcript::recent_edits(&tp, 5))
+                    .unwrap_or_default()
+            } else {
+                Vec::new()
+            };
             current.insert(
                 id.clone(),
                 PeerInfo {
@@ -159,6 +166,7 @@ fn sync_sessions(tx: &Tx, known: &mut HashMap<String, PeerInfo>) {
                     mode: sf.mode,
                     state,
                     state_since: st.since,
+                    files,
                 },
             );
         }
@@ -185,7 +193,7 @@ fn answer(session_id: &str, question: &str, from: &str) -> String {
     let Some(sf) = find_session(session_id) else {
         return "(this session is no longer live on its host)".to_string();
     };
-    if sf.mode == "live" && !sf.ctl.is_empty() {
+    if sf.mode == "live" && !sf.ctl.is_empty() && config::enabled("live") {
         if let Some(ans) = try_live(&sf.ctl, &frame(from, question)) {
             return ans;
         }

@@ -99,6 +99,64 @@ pub fn push_idle() -> bool {
     )
 }
 
+// ---- feature toggles -------------------------------------------------------
+// Every optional capability is on by default and can be turned off via the
+// `feature` command (config file) or CLAUDE_MESH_DISABLE=a,b for one shell.
+
+pub const FEATURES: &[&str] = &["ask", "fleet", "push", "live", "collision"];
+
+pub fn config_file() -> PathBuf {
+    base_dir().join("config.json")
+}
+
+fn disabled_set() -> std::collections::HashSet<String> {
+    let mut s = std::collections::HashSet::new();
+    if let Ok(v) = std::env::var("CLAUDE_MESH_DISABLE") {
+        s.extend(
+            v.split(',')
+                .map(|f| f.trim().to_string())
+                .filter(|f| !f.is_empty()),
+        );
+    }
+    if let Ok(raw) = std::fs::read_to_string(config_file()) {
+        if let Ok(v) = serde_json::from_str::<serde_json::Value>(&raw) {
+            if let Some(arr) = v.get("disabled").and_then(|x| x.as_array()) {
+                s.extend(arr.iter().filter_map(|f| f.as_str().map(String::from)));
+            }
+        }
+    }
+    s
+}
+
+/// Is a feature on? On by default; off if listed in config "disabled" or env.
+pub fn enabled(feature: &str) -> bool {
+    !disabled_set().contains(feature)
+}
+
+/// Persist a feature on/off into the config file.
+pub fn set_feature(feature: &str, on: bool) -> std::io::Result<()> {
+    let mut disabled: Vec<String> = std::fs::read_to_string(config_file())
+        .ok()
+        .and_then(|raw| serde_json::from_str::<serde_json::Value>(&raw).ok())
+        .and_then(|v| v.get("disabled").and_then(|x| x.as_array()).cloned())
+        .map(|arr| {
+            arr.iter()
+                .filter_map(|f| f.as_str().map(String::from))
+                .collect()
+        })
+        .unwrap_or_default();
+    disabled.retain(|f| f != feature);
+    if !on {
+        disabled.push(feature.to_string());
+    }
+    let _ = std::fs::create_dir_all(base_dir());
+    std::fs::write(
+        config_file(),
+        serde_json::to_string_pretty(&serde_json::json!({ "disabled": disabled }))
+            .unwrap_or_default(),
+    )
+}
+
 pub fn hostname() -> String {
     if let Ok(h) = std::env::var("CLAUDE_MESH_HOST") {
         if !h.is_empty() {

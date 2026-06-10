@@ -28,6 +28,9 @@ pub struct PeerInfo {
     /// Epoch seconds when the current state was entered.
     #[serde(default)]
     pub state_since: u64,
+    /// Recently-edited file paths, for cross-window collision detection.
+    #[serde(default)]
+    pub files: Vec<String>,
 }
 
 pub fn default_mode() -> String {

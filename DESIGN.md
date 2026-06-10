@@ -85,6 +85,16 @@ the fleet sorted by urgency (needs-you first); `--watch` refreshes it live. On a
 channel (desktop, DingTalk, Slack, ntfy, …) is the user's choice and works the same for local
 and remote windows. Because state is hook-driven, it's observed, not polled/guessed.
 
+## Feature toggles
+
+Every optional capability — `ask`, `fleet`, `push`, `live`, `collision` — is on by default and
+independently switchable via `claude-mesh feature <name> on|off` (persisted in
+`~/.claude-mesh/config.json` as a `disabled` list) or `CLAUDE_MESH_DISABLE=a,b` for one shell.
+The checks sit at the point of work — a hook no-ops, the daemon skips collection, an MCP tool
+declines — so toggling takes effect without re-running `init`. File-collision detection reads
+each window's recent `Edit`/`Write` tool calls from its own transcript (host-local) into
+`PeerInfo.files`; the view flags any path touched by 2+ windows on the same host.
+
 ## Security model
 
 - **Read-only answering.** No mutating tools on the answer path; a peer's question cannot

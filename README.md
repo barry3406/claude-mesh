@@ -97,6 +97,8 @@ testing without Claude:
 claude-mesh peers
 claude-mesh fleet            # attention dashboard: who needs you
 claude-mesh fleet --watch    # live-refreshing
+claude-mesh collisions       # windows editing the same file
+claude-mesh feature          # list features; `feature push off` disables one
 claude-mesh ask niche-monitor "how are you deduping?"
 claude-mesh ask all "what are you each working on?"
 ```
@@ -127,6 +129,29 @@ export CLAUDE_MESH_NOTIFY_CMD='osascript -e "display notification \"$MESH_MSG\""
 # …or your phone via any webhook (DingTalk / Slack / ntfy):
 export CLAUDE_MESH_NOTIFY_CMD='curl -s "$DING_WEBHOOK" -d "{\"msgtype\":\"text\",\"text\":{\"content\":\"$MESH_MSG\"}}"'
 ```
+
+When windows start stepping on each other, `claude-mesh fleet` (and `claude-mesh collisions`)
+flags any file being edited by more than one window:
+
+```text
+⚠ 1 file collision
+  src/auth.py  ← auth-api, migrate
+```
+
+## Everything is opt-out
+
+Every capability is on by default and independently switchable — `ask` (cross-window Q&A),
+`fleet` (attention tracking), `push` (notifications), `live` (the `cmesh` answer mode), and
+`collision` (file-collision warnings):
+
+```sh
+claude-mesh feature                  # list what's on
+claude-mesh feature push off         # turn one off (persists in ~/.claude-mesh/config.json)
+CLAUDE_MESH_DISABLE=fleet,collision claude   # …or per-shell, no persistence
+```
+
+Toggling takes effect immediately — the checks are at the point of work (a hook no-ops, the
+daemon skips collection, an MCP tool declines), so you never re-run `init`.
 
 ## Across machines (SSH / remote)
 

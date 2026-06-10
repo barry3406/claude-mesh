@@ -103,9 +103,10 @@ pub fn session_end() {
 pub fn prompt() {
     let v = read_stdin();
     let id = field(&v, "session_id");
-    if !id.is_empty() {
-        set_state(&id, "working", "");
+    if id.is_empty() || !config::enabled("fleet") {
+        return;
     }
+    set_state(&id, "working", "");
 }
 
 /// Stop: the agent finished a turn → idle (ball back in the user's court).
@@ -115,7 +116,9 @@ pub fn stop() {
     if id.is_empty() {
         return;
     }
-    set_state(&id, "idle", "");
+    if config::enabled("fleet") {
+        set_state(&id, "idle", "");
+    }
     if config::push_idle() {
         push(&config::derive_name(&cwd_of(&v)), "idle", "finished a turn");
     }
@@ -129,7 +132,9 @@ pub fn notification() {
         return;
     }
     let msg = field(&v, "message");
-    set_state(&id, "waiting", &msg);
+    if config::enabled("fleet") {
+        set_state(&id, "waiting", &msg);
+    }
     let window = config::derive_name(&cwd_of(&v));
     let text = if msg.is_empty() { "needs you" } else { &msg };
     push(&window, "waiting", text);
@@ -154,6 +159,9 @@ fn set_state(session_id: &str, state: &str, msg: &str) {
 /// Fire the user's notify command (if any), detached. $MESH_WINDOW / $MESH_STATE /
 /// $MESH_MSG are exported for the command to use.
 fn push(window: &str, state: &str, msg: &str) {
+    if !config::enabled("push") {
+        return;
+    }
     let cmd = config::notify_cmd();
     if cmd.is_empty() {
         return;

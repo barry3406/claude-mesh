@@ -55,6 +55,10 @@ enum Cmd {
         #[arg(short, long)]
         watch: bool,
     },
+    /// Show windows currently editing the same file.
+    Collisions,
+    /// Show or toggle features: `feature` lists, `feature collision off` toggles.
+    Feature { args: Vec<String> },
     /// Ask a peer from the CLI; use the name "all" to broadcast.
     Ask { name: String, question: Vec<String> },
     /// Launch `claude` wrapped for live cross-window answers (sets mode=live).
@@ -111,6 +115,8 @@ async fn main() {
         },
         Cmd::Peers => cli_peers().await,
         Cmd::Fleet { watch } => cli_fleet(watch).await,
+        Cmd::Collisions => cli_collisions().await,
+        Cmd::Feature { args } => cmd_feature(args),
         Cmd::Ask { name, question } => cli_ask(name, question.join(" ")).await,
         Cmd::Cmesh { args } => {
             if let Err(e) = cmesh::run(args) {
@@ -198,8 +204,23 @@ fn format_fleet(peers: &[protocol::PeerInfo], now: u64) -> String {
             .then(a.name.cmp(&b.name))
     });
 
+    let mut out = String::new();
+    let cols = collisions(peers);
+    if !cols.is_empty() {
+        out.push_str(&format!(
+            "\x1b[31m⚠ {} file collision(s)\x1b[0m\n",
+            cols.len()
+        ));
+        for (file, who) in &cols {
+            out.push_str(&format!("  {file}  ← {}\n", who.join(", ")));
+        }
+        out.push('\n');
+    }
     let needs = peers.iter().filter(|p| p.state == "waiting").count();
-    let mut out = format!("FLEET — {} window(s), {needs} need you\n\n", peers.len());
+    out.push_str(&format!(
+        "FLEET — {} window(s), {needs} need you\n\n",
+        peers.len()
+    ));
     for p in ps {
         let (color, sym, label) = match p.state.as_str() {
             "waiting" => ("\x1b[31m", "●", "needs you"),
@@ -221,6 +242,77 @@ fn format_fleet(peers: &[protocol::PeerInfo], now: u64) -> String {
     out
 }
 
+/// Files edited by 2+ windows on the same host → (file, [window names]).
+fn collisions(peers: &[protocol::PeerInfo]) -> Vec<(String, Vec<String>)> {
+    use std::collections::{BTreeMap, BTreeSet};
+    let mut map: BTreeMap<(String, String), BTreeSet<String>> = BTreeMap::new();
+    for p in peers {
+        for f in &p.files {
+            map.entry((p.host.clone(), f.clone()))
+                .or_default()
+                .insert(p.name.clone());
+        }
+    }
+    map.into_iter()
+        .filter(|(_, names)| names.len() >= 2)
+        .map(|((_host, file), names)| (file, names.into_iter().collect()))
+        .collect()
+}
+
+async fn cli_collisions() {
+    match client::query(QueryKind::Peers).await {
+        Ok(ServerMsg::Peers { peers, .. }) => {
+            let cols = collisions(&peers);
+            if cols.is_empty() {
+                println!("No file collisions — no two windows are editing the same file.");
+            } else {
+                println!("{} file collision(s):", cols.len());
+                for (file, who) in cols {
+                    println!("  {file}  ← {}", who.join(", "));
+                }
+            }
+        }
+        Ok(_) => println!("unexpected response"),
+        Err(e) => println!("error: {e}"),
+    }
+}
+
+fn cmd_feature(args: Vec<String>) {
+    if args.is_empty() {
+        for f in config::FEATURES {
+            println!(
+                "{:<11} {}",
+                f,
+                if config::enabled(f) { "on" } else { "off" }
+            );
+        }
+        return;
+    }
+    let name = args[0].as_str();
+    if !config::FEATURES.contains(&name) {
+        eprintln!(
+            "unknown feature '{name}'. known: {}",
+            config::FEATURES.join(", ")
+        );
+        std::process::exit(1);
+    }
+    let on = match args.get(1).map(|s| s.as_str()) {
+        Some("on") => true,
+        Some("off") => false,
+        _ => {
+            eprintln!("usage: claude-mesh feature <name> on|off");
+            std::process::exit(1);
+        }
+    };
+    match config::set_feature(name, on) {
+        Ok(()) => println!("{name} = {}", if on { "on" } else { "off" }),
+        Err(e) => {
+            eprintln!("error: {e}");
+            std::process::exit(1);
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -236,6 +328,7 @@ mod tests {
             mode: "pull".into(),
             state: state.into(),
             state_since: 0,
+            files: vec![],
         }
     }
 
@@ -259,5 +352,17 @@ mod tests {
         let i = out.find("z-idle").unwrap();
         assert!(w < k && k < i, "waiting, then working, then idle");
         assert!(out.contains("1 need you"));
+    }
+
+    #[test]
+    fn detects_same_file_collision() {
+        let mut a = peer("a", "working");
+        a.files = vec!["/x/auth.py".into()];
+        let mut b = peer("b", "working");
+        b.files = vec!["/x/auth.py".into(), "/x/only-b.py".into()];
+        let c = collisions(&[a, b]);
+        assert_eq!(c.len(), 1);
+        assert_eq!(c[0].0, "/x/auth.py");
+        assert_eq!(c[0].1, vec!["a".to_string(), "b".to_string()]);
     }
 }

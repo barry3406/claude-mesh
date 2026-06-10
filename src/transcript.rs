@@ -208,6 +208,55 @@ pub fn relevant_lines(transcript_path: &str, question: &str, max: usize) -> Vec<
     hits
 }
 
+/// File paths recently edited in this transcript (most-recent-first, deduped,
+/// capped), parsed from Edit/Write/MultiEdit/NotebookEdit tool_use inputs in the
+/// recent tail. Used for cross-window file-collision detection.
+pub fn recent_edits(transcript_path: &str, max: usize) -> Vec<String> {
+    let content = read_tail(transcript_path, TAIL_BYTES);
+    let mut seen = std::collections::HashSet::new();
+    let mut out = Vec::new();
+    'lines: for line in content.lines().rev() {
+        if out.len() >= max {
+            break;
+        }
+        let Ok(v) = serde_json::from_str::<Value>(line) else {
+            continue;
+        };
+        if v.get("type").and_then(|x| x.as_str()) != Some("assistant") {
+            continue;
+        }
+        let Some(blocks) = v
+            .get("message")
+            .and_then(|m| m.get("content"))
+            .and_then(|c| c.as_array())
+        else {
+            continue;
+        };
+        for b in blocks {
+            if b.get("type").and_then(|x| x.as_str()) != Some("tool_use") {
+                continue;
+            }
+            let name = b.get("name").and_then(|x| x.as_str()).unwrap_or("");
+            if !matches!(name, "Edit" | "Write" | "MultiEdit" | "NotebookEdit") {
+                continue;
+            }
+            if let Some(fp) = b
+                .get("input")
+                .and_then(|i| i.get("file_path"))
+                .and_then(|x| x.as_str())
+            {
+                if seen.insert(fp.to_string()) {
+                    out.push(fp.to_string());
+                    if out.len() >= max {
+                        break 'lines;
+                    }
+                }
+            }
+        }
+    }
+    out
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -267,5 +316,15 @@ mod tests {
             ctx.chars().count() < 700,
             "output respects the max_chars cap"
         );
+    }
+
+    #[test]
+    fn recent_edits_extracts_file_paths() {
+        let l1 = r#"{"type":"assistant","message":{"role":"assistant","content":[{"type":"tool_use","name":"Edit","input":{"file_path":"/x/auth.py"}}]}}"#.to_string();
+        let l2 = r#"{"type":"assistant","message":{"role":"assistant","content":[{"type":"text","text":"hi"},{"type":"tool_use","name":"Write","input":{"file_path":"/x/new.py"}}]}}"#.to_string();
+        let path = tmp("edits.jsonl", &[l1, l2]);
+        let files = recent_edits(&path, 5);
+        assert!(files.contains(&"/x/auth.py".to_string()));
+        assert!(files.contains(&"/x/new.py".to_string()));
     }
 }

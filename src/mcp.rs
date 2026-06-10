@@ -183,6 +183,9 @@ async fn tools_call(req: &Value, id: Option<Value>) -> Value {
 }
 
 async fn run_ask(kind: QueryKind) -> String {
+    if !config::enabled("ask") {
+        return "cross-window ask is disabled (enable: claude-mesh feature ask on)".to_string();
+    }
     match client::query(kind).await {
         Ok(ServerMsg::Answers { answers, .. }) => format_answers(&answers),
         Ok(_) => "unexpected broker response".into(),
